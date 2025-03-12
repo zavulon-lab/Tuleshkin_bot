@@ -1,0 +1,5 @@
+__pycache__
+private_threads.json
+*.log
+.venv
+bot_token.py
