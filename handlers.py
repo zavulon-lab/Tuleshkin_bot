@@ -50,37 +50,45 @@ async def create_thread_error(interaction: Interaction, error: app_commands.AppC
 
 @bot.tree.command(name="отправить_откат", description="Отправить откат в ветку", guild=Object(id=GUILD_ID))
 async def send_rollback(interaction: Interaction):
-		"""Отправляет откат в выбранную ветку из двух каналов."""
-		try:
-				# Откладываем ответ, чтобы предотвратить истечение взаимодействия
-				await interaction.response.defer(ephemeral=True)
+    """Отправляет откат в выбранную ветку из двух каналов."""
+    try:
+        # Откладываем ответ, чтобы предотвратить истечение взаимодействия
+        await interaction.response.defer(ephemeral=True)
 
-				# Получаем оба канала
-				channel_1 = interaction.guild.get_channel(CHANNEL_1_ID)
-				channel_2 = interaction.guild.get_channel(CHANNEL_2_ID)
+        # Получаем оба канала
+        channel_1 = interaction.guild.get_channel(CHANNEL_1_ID)
+        channel_2 = interaction.guild.get_channel(CHANNEL_2_ID)
 
-				if not channel_1 or not channel_2:
-						await interaction.followup.send("❌ Один из каналов не найден!", ephemeral=True)
-						return
+        if not channel_1 or not channel_2:
+            await interaction.followup.send("❌ Один из каналов не найден!", ephemeral=True)
+            return
 
-				# Получаем все активные ветки из обоих каналов
-				active_threads = []
-				for channel in [channel_1, channel_2]:
-						# Получаем активные ветки из канала
-						threads = channel.threads
-						active_threads.extend([thread for thread in threads if not thread.archived])
+        # Получаем активные ветки из канала 1 и сортируем их по дате создания
+        threads_channel_1 = sorted(
+            [thread for thread in channel_1.threads if not thread.archived],
+            key=lambda x: x.created_at,  # Сортировка по дате создания
+            reverse=True  # Сначала самые новые
+        )
 
-				if not active_threads:
-						await interaction.followup.send("❌ Нет активных веток в указанных каналах!", ephemeral=True)
-						return
+        # Получаем активные ветки из канала 2 и сортируем их по дате создания
+        threads_channel_2 = sorted(
+            [thread for thread in channel_2.threads if not thread.archived],
+            key=lambda x: x.created_at,  # Сортировка по дате создания
+            reverse=True  # Сначала самые новые
+        )
 
-				# Отправляем сообщение с выпадающим меню
-				view = ThreadSelectView(active_threads)
-				await interaction.followup.send("Выберите ветку для отправки отката:", view=view, ephemeral=True)
+        # Проверяем, есть ли активные ветки в каналах
+        if not threads_channel_1 and not threads_channel_2:
+            await interaction.followup.send("❌ Нет активных веток в указанных каналах!", ephemeral=True)
+            return
 
-		except Exception as e:
-				print(f"Ошибка: {e}")
-				await interaction.followup.send("❌ Произошла ошибка при обработке вашего запроса.", ephemeral=True)
+        # Отправляем сообщение с выпадающими списками
+        view = ThreadSelectView(threads_channel_1, threads_channel_2)
+        await interaction.followup.send("Выберите ветку для отправки отката:", view=view, ephemeral=True)
+
+    except Exception as e:
+        print(f"Ошибка: {e}")
+        await interaction.followup.send("❌ Произошла ошибка при обработке вашего запроса.", ephemeral=True)
 
 @bot.event
 async def on_thread_delete(thread: Thread):
