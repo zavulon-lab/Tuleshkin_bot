@@ -1,8 +1,9 @@
 from constants import *
 from discord.ui import Select, View, Modal, TextInput, button, Button
 from json_func import private_threads, save_private_threads
-from discord import TextStyle, Interaction, CategoryChannel, SelectOption, TextChannel, ChannelType, Thread, ButtonStyle
+from discord import TextStyle, Interaction, CategoryChannel, SelectOption, TextChannel, ChannelType, Thread, ButtonStyle, SelectMenu
 from discord.errors import NotFound
+from datetime import datetime
 
 # Словарь для хранения созданных веток (ключ: ID ветки, значение: {"thread": объект ветки, "creator": создатель})
 threads = {}
@@ -176,61 +177,119 @@ class ApplicationChannelButtons(View):
 				await interaction.response.send_modal(FormModal())
 
 class ThreadSelectView(View):
-		def __init__(self, threads: list[Thread]):
-				super().__init__()
-				# Добавляем выпадающее меню с выбором ветки
-				self.add_item(ThreadSelect(threads))
+    def __init__(self, threads_channel_1=None, threads_channel_2=None):
+        super().__init__()
+        
+        # Устанавливаем пустые списки по умолчанию
+        if threads_channel_1 is None:
+            threads_channel_1 = []
+        if threads_channel_2 is None:
+            threads_channel_2 = []
+
+        # Создаем выпадающие списки для веток из канала 1
+        if threads_channel_1:
+            # Разделяем ветки на группы по 25
+            for i in range(0, len(threads_channel_1), 25):
+                group = threads_channel_1[i:i + 25]  # Берем срез из 25 элементов
+                options_channel_1 = [SelectOption(label=thread.name, value=str(thread.id)) for thread in group]
+                select_channel_1 = Select(
+                    custom_id=f"channel_1_select_{i}",
+                    placeholder=f"КАПТ(часть {i // 25 + 1})",
+                    options=options_channel_1
+                )
+                select_channel_1.callback = self.on_select_channel_1
+                self.add_item(select_channel_1)
+
+        # Создаем выпадающие списки для веток из канала 2
+        if threads_channel_2:
+            # Разделяем ветки на группы по 25
+            for i in range(0, len(threads_channel_2), 25):
+                group = threads_channel_2[i:i + 25]  # Берем срез из 25 элементов
+                options_channel_2 = [SelectOption(label=thread.name, value=str(thread.id)) for thread in group]
+                select_channel_2 = Select(
+                    custom_id=f"channel_2_select_{i}",
+                    placeholder=f"МКЛ(часть {i // 25 + 1})",
+                    options=options_channel_2
+                )
+                select_channel_2.callback = self.on_select_channel_2
+                self.add_item(select_channel_2)
+
+    async def on_select_channel_1(self, interaction: Interaction):
+        # Обработка выбора ветки из канала 1
+        selected_thread_id = int(interaction.data["values"][0])  # Получаем выбранный ID ветки
+        selected_thread = interaction.guild.get_thread(selected_thread_id)
+        if selected_thread:
+            await interaction.response.send_modal(RollbackForm(selected_thread))
+        else:
+            await interaction.response.send_message("❌ Ветка не найдена.", ephemeral=True)
+
+    async def on_select_channel_2(self, interaction: Interaction):
+        # Обработка выбора ветки из канала 2
+        selected_thread_id = int(interaction.data["values"][0])  # Получаем выбранный ID ветки
+        selected_thread = interaction.guild.get_thread(selected_thread_id)
+        if selected_thread:
+            await interaction.response.send_modal(RollbackForm(selected_thread))
+        else:
+            await interaction.response.send_message("❌ Ветка не найдена.", ephemeral=True)
 
 class MainChannelButtons(View):
-		def __init__(self):
-				super().__init__(timeout=None)  # timeout=None делает кнопки активными всегда
+    def __init__(self):
+        super().__init__(timeout=None)  # timeout=None делает кнопки активными всегда
 
-		@button(label="🗃️Отправить откат", style=ButtonStyle.success, custom_id="send_rollback_button")
-		async def send_rollback_button(self, interaction: Interaction, button: Button):
-				try:
-						# Откладываем ответ, чтобы предотвратить истечение взаимодействия
-						await interaction.response.defer(ephemeral=True)
+    @button(label="🗃️Отправить откат", style=ButtonStyle.success, custom_id="send_rollback_button")
+    async def send_rollback_button(self, interaction: Interaction, button: Button):
+        try:
+            # Откладываем ответ, чтобы предотвратить истечение взаимодействия
+            await interaction.response.defer(ephemeral=True)
 
-						# Получаем оба канала
-						channel_1 = interaction.guild.get_channel(CHANNEL_1_ID)
-						channel_2 = interaction.guild.get_channel(CHANNEL_2_ID)
+            # Получаем оба канала
+            channel_1 = interaction.guild.get_channel(CHANNEL_1_ID)
+            channel_2 = interaction.guild.get_channel(CHANNEL_2_ID)
 
-						if not channel_1 or not channel_2:
-								await interaction.followup.send("❌ Один из каналов не найден!", ephemeral=True)
-								return
+            if not channel_1 or not channel_2:
+                await interaction.followup.send("❌ Один из каналов не найден!", ephemeral=True)
+                return
 
-						# Получаем все активные ветки из обоих каналов
-						active_threads = []
-						for channel in [channel_1, channel_2]:
-								# Получаем активные ветки из канала
-								threads = channel.threads
-								active_threads.extend([thread for thread in threads if not thread.archived])
+            # Получаем активные ветки из канала 1 и сортируем их по дате создания
+            threads_channel_1 = sorted(
+                [thread for thread in channel_1.threads if not thread.archived],
+                key=lambda x: x.created_at,  # Сортировка по дате создания
+                reverse=True  # Сначала самые новые
+            )
 
-						if not active_threads:
-								await interaction.followup.send("❌ Нет активных веток в указанных каналах!", ephemeral=True)
-								return
+            # Получаем активные ветки из канала 2 и сортируем их по дате создания
+            threads_channel_2 = sorted(
+                [thread for thread in channel_2.threads if not thread.archived],
+                key=lambda x: x.created_at,  # Сортировка по дате создания
+                reverse=True  # Сначала самые новые
+            )
 
-						# Отправляем сообщение с выпадающим меню
-						view = ThreadSelectView(active_threads)
-						await interaction.followup.send("Выберите ветку для отправки отката:", view=view, ephemeral=True)
+            # Проверяем, есть ли активные ветки в каналах
+            if not threads_channel_1 and not threads_channel_2:
+                await interaction.followup.send("❌ Нет активных веток в указанных каналах!", ephemeral=True)
+                return
 
-				except Exception as e:
-						print(f"Ошибка: {e}")
-						await interaction.followup.send("❌ Произошла ошибка при обработке вашего запроса.", ephemeral=True)
+            # Отправляем сообщение с выпадающими списками
+            view = ThreadSelectView(threads_channel_1, threads_channel_2)
+            await interaction.followup.send("Выберите ветку для отправки отката:", view=view, ephemeral=True)
 
-		@button(label="Создать ветку", style=ButtonStyle.primary, custom_id="create_thread_button")
-		async def create_thread_button(self, interaction: Interaction, button: Button):
-				# Проверяем, есть ли у пользователя права администратора
-				if not interaction.user.guild_permissions.administrator:  # Проверка на администратора
-						await interaction.response.send_message("❌ У вас нет прав на создание веток!", ephemeral=True)
-						return
+        except Exception as e:
+            print(f"Ошибка: {e}")
+            await interaction.followup.send("❌ Произошла ошибка при обработке вашего запроса. 4444", ephemeral=True)
 
-				# Отправляем выпадающее меню для выбора канала
-				view = View()
-				view.add_item(ChannelSelect())
-				await interaction.response.send_message(
-						"Выберите канал для создания ветки:", view=view, ephemeral=True
-				)
+    @button(label="Создать ветку", style=ButtonStyle.primary, custom_id="create_thread_button")
+    async def create_thread_button(self, interaction: Interaction, button: Button):
+        # Проверяем, есть ли у пользователя права администратора
+        if not interaction.user.guild_permissions.administrator:  # Проверка на администратора
+            await interaction.response.send_message("❌ У вас нет прав на создание веток!", ephemeral=True)
+            return
+
+        # Отправляем выпадающее меню для выбора канала
+        view = View()
+        view.add_item(ChannelSelect())
+        await interaction.response.send_message(
+            "Выберите канал для создания ветки:", view=view, ephemeral=True
+        )
 				
 class RollbackForm(Modal, title="Отправить откат"):
 		def __init__(self, thread: Thread):
@@ -307,5 +366,5 @@ class RollbackForm(Modal, title="Отправить откат"):
 				except Exception as e:
 						print(f"Ошибка: {e}")
 						await interaction.followup.send(
-								"❌ Произошла ошибка при обработке вашего запроса.", ephemeral=True
+								"❌ Произошла ошибка при обработке вашего запроса. rerer", ephemeral=True
 						)
