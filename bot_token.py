@@ -1,1 +1,1 @@
-TOKEN = "MTMyMjMzODAxNzMyNjY2NTgzMw.GV1NJV.NaaEfJlwMmG4Yuc8EqlD7QIxj0y2ICPUDCePvM"  # Замените на ваш токен
+TOKEN = "MTMyMjMzODAxNzMyNjY2NTgzMw.GPndtv.hwCiqcUh80o3de8NfWmISFfoT0Q3xPn4HKEw7w"  # Замените на ваш токен
