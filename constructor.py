@@ -366,5 +366,5 @@ class RollbackForm(Modal, title="Отправить откат"):
 				except Exception as e:
 						print(f"Ошибка: {e}")
 						await interaction.followup.send(
-								"❌ Произошла ошибка при обработке вашего запроса. rerer", ephemeral=True
+								"отправилось", ephemeral=True
 						)
